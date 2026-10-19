@@ -1,12 +1,24 @@
-name: CI
+name: CI/CD
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
   check:
+    name: Lint, types and tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,12 +29,28 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - run: npm run test:coverage
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          node -e '
+            const t = require("./coverage/coverage-summary.json").total;
+            const row = (k) => `| ${k} | ${t[k].pct}% | ${t[k].covered}/${t[k].total} |`;
+            console.log(["### Coverage", "", "| | % | Covered |", "| --- | --- | --- |",
+              ...["lines", "branches", "functions", "statements"].map(row)].join("\n"));
+          ' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
 
   e2e:
+    name: Browser tests
     runs-on: ubuntu-latest
-    needs: check
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,3 +67,93 @@ jobs:
           name: playwright-traces
           path: test-results/
           retention-days: 7
+
+  docker:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: jobtrail:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Boots the real image on an empty volume, which also checks that
+      # migrations run on startup
+      - name: Start the container and hit every page
+        run: |
+          docker run -d --name app -p 3000:3000 jobtrail:ci
+          for i in $(seq 1 30); do
+            curl -fs -o /dev/null http://localhost:3000/ && break
+            sleep 2
+          done
+          for path in / /stats; do
+            echo "GET $path"
+            curl -fsS -o /dev/null "http://localhost:3000$path"
+          done
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/applications/1)
+          test "$status" = "404"
+
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
+
+  publish:
+    name: Publish image
+    needs: [check, e2e, docker]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # main gets "main" and a sha tag, version tags get the version and "latest"
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
+  release:
+    name: GitHub release
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release if it doesn't exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release $TAG already exists, leaving it alone"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes --verify-tag
+          fi

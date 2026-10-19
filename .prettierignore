@@ -2,3 +2,6 @@ drizzle/meta
 package-lock.json
 .next
 data
+coverage
+playwright-report
+test-results
