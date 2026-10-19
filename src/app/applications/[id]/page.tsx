@@ -85,7 +85,7 @@ function TimelineItem({ event }: { event: Event }) {
   if (event.type === "created") {
     body = (
       <>
-        Added to{" "}
+        {event.note ? "Imported into" : "Added to"}{" "}
         <strong className="font-medium">{STATUS_LABELS[event.toStatus ?? "wishlist"]}</strong>
       </>
     );
