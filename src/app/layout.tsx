@@ -13,8 +13,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
+    // Browser extensions (Grammarly, ColorZilla, password managers...) add
+    // attributes to <html> and <body> before React hydrates. This only
+    // silences attribute mismatches on these two elements, not their children.
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
+        suppressHydrationWarning
+      >
         <Nav />
         <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">{children}</main>
       </body>
