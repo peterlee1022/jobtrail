@@ -44,6 +44,14 @@ The database is a single file at `data/jobtrail.db`. Delete it if you want to st
 
 ### With Docker
 
+Each release publishes an image to the GitHub container registry:
+
+```bash
+docker run -p 3000:3000 -v jobtrail-data:/data ghcr.io/peterlee1022/jobtrail:latest
+```
+
+Or build it yourself:
+
 ```bash
 docker build -t jobtrail .
 docker run -p 3000:3000 -v jobtrail-data:/data jobtrail
