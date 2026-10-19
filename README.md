@@ -104,7 +104,7 @@ Every push and pull request runs the pipeline in `.github/workflows/ci.yml`:
 2. Browser tests against a production build
 3. Docker build, then a smoke test that boots the container on an empty volume and requests each page
 
-When all of that passes on `main`, the image is pushed as `main` and as the short commit sha. Pushing a version tag such as `v0.2.0` publishes that version plus `latest` and creates a GitHub release with generated notes. Dependabot opens weekly PRs for npm packages and GitHub Actions.
+When all of that passes on `main`, the image is pushed as `main` and as the short commit sha. Pushing a version tag such as `v0.2.0` publishes that version plus `latest` and creates a GitHub release with generated notes. Dependabot opens one grouped PR a month for npm packages and one for GitHub Actions, skipping major versions.
 
 ## Possible additions
 
