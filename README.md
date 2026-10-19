@@ -13,6 +13,7 @@ A small self-hosted tracker for job applications. Spreadsheets work fine until i
 - Cards that have been sitting in applied or screening for 3+ weeks get a "quiet" tag so you know who to follow up with.
 - Stats page with the pipeline funnel, response rate, median time to hear back, and applications per week.
 - Salary fields accept stuff like `120k` or `$150,000` because that's how people actually type it.
+- CSV import and export. Column names are matched loosely (Employer, Job Title, Date Applied and so on), so most existing spreadsheets import without any editing. Rows that can't be read are listed by line number and the rest still go in.
 
 ![Stats page](docs/stats.png)
 
@@ -108,7 +109,6 @@ When all of that passes on `main`, the image is pushed as `main` and as the shor
 
 ## Possible additions
 
-- CSV import, to bring over an existing spreadsheet
 - Reminders for follow-ups instead of just the quiet tag
 - Auth, for hosting it somewhere other than a personal machine
 
