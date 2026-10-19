@@ -7,6 +7,8 @@ import { z } from "zod";
 import { db } from "@/db";
 import { applications, events, type Application } from "@/db/schema";
 import { isStatus, STAGE_RANK, type Status } from "@/lib/statuses";
+import { parseCsv } from "@/lib/csv";
+import { mapImportRows } from "@/lib/import";
 import { applicationSchema, noteSchema } from "@/lib/validation";
 
 export type FormState = {
@@ -171,4 +173,47 @@ export async function deleteApplication(id: number) {
   });
   refresh();
   redirect("/");
+}
+
+export type ImportState = {
+  imported?: number;
+  errors?: { line: number; message: string }[];
+};
+
+const MAX_IMPORT_BYTES = 1024 * 1024;
+
+export async function importApplications(
+  _prev: ImportState,
+  formData: FormData,
+): Promise<ImportState> {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { errors: [{ line: 0, message: "Choose a CSV file first" }] };
+  }
+  if (file.size > MAX_IMPORT_BYTES) {
+    return { errors: [{ line: 0, message: "That file is over 1 MB" }] };
+  }
+
+  const { rows, errors } = mapImportRows(parseCsv(await file.text()));
+  if (rows.length === 0) return { imported: 0, errors };
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    for (const row of rows) {
+      const [app] = await tx
+        .insert(applications)
+        .values({ ...row, createdAt: now, updatedAt: now })
+        .returning({ id: applications.id });
+      await tx.insert(events).values({
+        applicationId: app.id,
+        type: "created",
+        toStatus: row.status,
+        note: "Imported from CSV",
+        createdAt: now,
+      });
+    }
+  });
+
+  refresh();
+  return { imported: rows.length, errors };
 }

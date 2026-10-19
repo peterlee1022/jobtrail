@@ -96,7 +96,9 @@ export function mapImportRows(table: string[][]): ImportResult {
     const line = i + 2;
     const raw: Partial<Record<Field, string>> = {};
     columns.forEach((field, c) => {
-      if (field && cells[c] !== undefined) raw[field] = cells[c].trim();
+      // Undo the formula guard that our own export adds
+      if (field && cells[c] !== undefined)
+        raw[field] = cells[c].trim().replace(/^'(?=[=+\-@])/, "");
     });
 
     // A single "120k - 150k" column is common, split it into min and max
